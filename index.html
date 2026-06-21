@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>英単語4択クイズ</title>
+    <style>
+        body { font-family: sans-serif; text-align: center; background: #f0f2f5; padding: 20px; }
+        .quiz-container { background: white; max-width: 480px; margin: 0 auto; padding: 20px; border-radius: 10px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+        .progress { font-size: 14px; color: #666; margin-bottom: 10px; text-align: right; }
+        #word { font-size: 32px; font-weight: bold; margin-bottom: 20px; color: #333; }
+        .btn { display: block; width: 100%; padding: 12px; margin: 10px 0; font-size: 18px; background: #007bff; color: white; border: none; border-radius: 5px; cursor: pointer; transition: 0.2s; }
+        .btn:hover { background: #0056b3; }
+        #result { font-size: 24px; font-weight: bold; margin-top: 20px; min-height: 36px; }
+        
+        /* スコア表示エリア */
+        .score-box { font-size: 22px; margin-bottom: 20px; padding: 15px; background: #e9ecef; border-radius: 8px; }
+        
+        /* 結果リストのスタイル */
+        #result-list { text-align: left; max-width: 400px; margin: 0 auto 20px auto; font-size: 18px; line-height: 1.8; border-top: 1px solid #ddd; padding-top: 15px; }
+        .result-item { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #eee; padding: 8px 0; }
+        .word-info { display: flex; gap: 15px; align-items: center; }
+        .word-eng { font-weight: bold; color: #333; min-width: 80px; }
+        .word-jp { color: #666; font-size: 16px; }
+        
+        /* ◯と❌の色指定 */
+        .mark-correct { color: #dc3545; font-weight: bold; font-size: 20px; } /* 赤色 */
+        .mark-wrong { color: #0056b3; font-weight: bold; font-size: 20px; }   /* 青色 */
+    </style>
+</head>
+<body>
+
+<div class="quiz-container">
+    <div id="quiz-screen">
+        <div id="progress" class="progress"></div>
+        <div id="word">読み込み中...</div>
+        <div id="choices"></div>
+        <div id="result"></div>
+        <button id="next-btn" class="btn" style="display:none; background:#28a745;">次の問題へ</button>
+    </div>
+
+    <div id="result-screen" style="display:none;">
+        <div id="word">🎉 クイズ完了！</div>
+        <div id="score-area"></div>
+        
+        <div id="result-list"></div>
+        
+        <button id="retry-btn" class="btn" style="background:#6c757d;">もう一度挑戦する</button>
+    </div>
+</div>
+
+<script>
+// ⚠️ ここにGASで発行されたURLを貼り付けてください
+const GAS_URL = 'https://script.google.com/macros/s/AKfycbz1z7ApzICWpv-zuau8VQPrNUdJWO6IODddLUj8_n2ifn2ZrQAVavYiK0tB90_Kjsob/exec'; 
+
+let allWords = [];
+let remainingWords = [];
+let currentQuiz = {};
+let totalQuestions = 0;
+let correctCount = 0;
+
+// 今回のクイズの結果（英単語、正しい日本語、正誤）を保存する配列
+let quizResults = []; 
+
+async function fetchWords() {
+    try {
+        const response = await fetch(GAS_URL);
+        allWords = await response.json();
+        if (allWords.length < 4) {
+            document.getElementById('word').innerText = '単語を4つ以上登録してください';
+            return;
+        }
+        initGame();
+    } catch (error) {
+        document.getElementById('word').innerText = 'データの読み込みに失敗しました';
+    }
+}
+
+function initGame() {
+    remainingWords = [...allWords].sort(() => 0.5 - Math.random());
+    totalQuestions = remainingWords.length;
+    correctCount = 0;
+    quizResults = []; // 結果をリセット
+    
+    document.getElementById('quiz-screen').style.display = 'block';
+    document.getElementById('result-screen').style.display = 'none';
+    
+    nextQuestion();
+}
+
+function nextQuestion() {
+    if (remainingWords.length === 0) {
+        showFinalResult();
+        return;
+    }
+
+    document.getElementById('result').innerText = '';
+    document.getElementById('next-btn').style.display = 'none';
+    document.getElementById('progress').innerText = `残り ${remainingWords.length}問 / 全${totalQuestions}問`;
+
+    const correctWord = remainingWords.shift();
+    currentQuiz = correctWord;
+    document.getElementById('word').innerText = correctWord.english;
+
+    const wrongs = allWords.filter(w => w.english !== correctWord.english);
+    const shuffledWrongs = wrongs.sort(() => 0.5 - Math.random()).slice(0, 3);
+    const choices = [correctWord, ...shuffledWrongs].sort(() => 0.5 - Math.random());
+
+    const choicesContainer = document.getElementById('choices');
+    choicesContainer.innerHTML = '';
+    choices.forEach(choice => {
+        const button = document.createElement('button');
+        button.className = 'btn';
+        button.innerText = choice.japanese;
+        button.onclick = () => checkAnswer(choice.japanese);
+        choicesContainer.appendChild(button);
+    });
+}
+
+function checkAnswer(selectedJapanese) {
+    const resultDiv = document.getElementById('result');
+    const buttons = document.querySelectorAll('#choices .btn');
+    buttons.forEach(btn => btn.disabled = true);
+
+    const isCorrect = (selectedJapanese === currentQuiz.japanese);
+    
+    // 1. 今回の結果（正しい日本語訳も含む）を記録する
+    quizResults.push({
+        english: currentQuiz.english,
+        japanese: currentQuiz.japanese, // 正しい日本語を追加
+        isCorrect: isCorrect
+    });
+
+    if (isCorrect) {
+        resultDiv.innerText = '⭕ 正解！';
+        resultDiv.style.color = 'green';
+        correctCount++;
+    } else {
+        resultDiv.innerText = `❌ 不正解... (正解: ${currentQuiz.japanese})`;
+        resultDiv.style.color = 'red';
+    }
+    
+    document.getElementById('next-btn').style.display = 'block';
+}
+
+function showFinalResult() {
+    document.getElementById('quiz-screen').style.display = 'none';
+    document.getElementById('result-screen').style.display = 'block';
+    
+    const rate = Math.round((correctCount / totalQuestions) * 100);
+    const scoreArea = document.getElementById('score-area');
+    scoreArea.innerHTML = `
+        <div class="score-box">
+            <strong>スコア: ${correctCount} / ${totalQuestions} 問</strong><br>
+            正解率: ${rate}%
+        </div>
+    `;
+
+    const listContainer = document.getElementById('result-list');
+    listContainer.innerHTML = '<h3>【今回の学習結果】</h3>';
+
+    quizResults.forEach(item => {
+        const itemDiv = document.createElement('div');
+        itemDiv.className = 'result-item';
+
+        // 左側：英単語と正しい日本語をまとめるコンテナ
+        const infoDiv = document.createElement('div');
+        infoDiv.className = 'word-info';
+
+        const engSpan = document.createElement('span');
+        engSpan.className = 'word-eng';
+        engSpan.innerText = item.english;
+
+        const jpSpan = document.createElement('span');
+        jpSpan.className = 'word-jp';
+        jpSpan.innerText = item.japanese; // 正しい答えを表示
+
+        infoDiv.appendChild(engSpan);
+        infoDiv.appendChild(jpSpan);
+
+        // 右側：◯✕マーク
+        const markSpan = document.createElement('span');
+        if (item.isCorrect) {
+            markSpan.innerText = '◯';
+            markSpan.className = 'mark-correct'; // 赤色
+        } else {
+            markSpan.innerText = '✕';
+            markSpan.className = 'mark-wrong';   // 青色
+        }
+
+        itemDiv.appendChild(infoDiv);
+        itemDiv.appendChild(markSpan);
+        listContainer.appendChild(itemDiv);
+    });
+}
+
+document.getElementById('next-btn').onclick = nextQuestion;
+document.getElementById('retry-btn').onclick = initGame;
+
+fetchWords();
+</script>
+
+</body>
+</html>
