@@ -13,6 +13,13 @@
         .btn:hover { background: #0056b3; }
         #result { font-size: 24px; font-weight: bold; margin-top: 20px; min-height: 36px; }
         
+        /* タイトル・選択画面のスタイル */
+        .screen-title { font-size: 20px; font-weight: bold; margin-bottom: 20px; color: #555; }
+        .btn-genre { background: #17a2b8; } /* ジャンル用は水色 */
+        .btn-genre:hover { background: #138496; }
+        .btn-mode { background: #6f42c1; }  /* モード用は紫色 */
+        .btn-mode:hover { background: #59359a; }
+        
         /* スコア表示エリア */
         .score-box { font-size: 22px; margin-bottom: 20px; padding: 15px; background: #e9ecef; border-radius: 8px; }
         
@@ -31,7 +38,18 @@
 <body>
 
 <div class="quiz-container">
-    <div id="quiz-screen">
+    <div id="genre-screen">
+        <div class="screen-title">📁 ジャンルを選んでください</div>
+        <div id="genre-buttons"></div>
+    </div>
+
+    <div id="mode-screen" style="display:none;">
+        <div class="screen-title">📊 出題モードを選んでください</div>
+        <button id="mode-10-btn" class="btn btn-mode">🔟 10問クイズ</button>
+        <button id="mode-all-btn" class="btn btn-mode">♾️ 全問クイズ</button>
+    </div>
+
+    <div id="quiz-screen" style="display:none;">
         <div id="progress" class="progress"></div>
         <div id="word">読み込み中...</div>
         <div id="choices"></div>
@@ -42,48 +60,86 @@
     <div id="result-screen" style="display:none;">
         <div id="word">🎉 クイズ完了！</div>
         <div id="score-area"></div>
-        
         <div id="result-list"></div>
-        
         <button id="retry-btn" class="btn" style="background:#6c757d;">もう一度挑戦する</button>
     </div>
 </div>
 
 <script>
-// ⚠️ ここにGASで発行されたURLを貼り付けてください
-const GAS_URL = 'https://script.google.com/macros/s/AKfycbz1z7ApzICWpv-zuau8VQPrNUdJWO6IODddLUj8_n2ifn2ZrQAVavYiK0tB90_Kjsob/exec'; 
+// ⚠️ ここに【新しいGASのURL】を貼り付けてください
+const GAS_URL = 'https://script.google.com/macros/s/AKfycbxzuX5M_UD1rqTozFj6hyO3ImLwuut241zL5UuVyGFzz3vfawE0S6pv9p9Vh8yWWQFS/exec'; 
 
-let allWords = [];
-let remainingWords = [];
+let rawData = {};         // GASから届いた全データ（ジャンル別）
+let selectedGenre = '';   // 現在選ばれているジャンル名
+let currentGenreWords = []; // 選ばれたジャンルの単語リスト全部
+let remainingWords = [];  // クイズでまだ出題していない残り単語
 let currentQuiz = {};
 let totalQuestions = 0;
 let correctCount = 0;
-
-// 今回のクイズの結果（英単語、正しい日本語、正誤）を保存する配列
 let quizResults = []; 
 
+// 起動時にデータを一括取得
 async function fetchWords() {
     try {
         const response = await fetch(GAS_URL);
-        allWords = await response.json();
-        if (allWords.length < 4) {
-            document.getElementById('word').innerText = '単語を4つ以上登録してください';
-            return;
-        }
-        initGame();
+        rawData = await response.json();
+        
+        // ジャンル選択ボタンを自動生成
+        createGenreButtons();
     } catch (error) {
         document.getElementById('word').innerText = 'データの読み込みに失敗しました';
+        console.error(error);
     }
 }
 
-function initGame() {
-    remainingWords = [...allWords].sort(() => 0.5 - Math.random());
+// スプレッドシートのシート名からボタンを自動で作る
+function createGenreButtons() {
+    const container = document.getElementById('genre-buttons');
+    container.innerHTML = '';
+    
+    // スプレッドシートの各シート名（ジャンル名）を取得してループ処理
+    Object.keys(rawData).forEach(genreName => {
+        // 各ジャンルに最低4つの単語があるかチェック
+        if (rawData[genreName].length < 4) return; 
+
+        const button = document.createElement('button');
+        button.className = 'btn btn-genre';
+        button.innerText = genreName;
+        button.onclick = () => selectGenre(genreName);
+        container.appendChild(button);
+    });
+
+    if(container.innerHTML === "") {
+        container.innerHTML = "<p>有効な単語データ（4択を作れる4単語以上）が入ったシートが見つかりません。</p>";
+    }
+}
+
+// ジャンルが選ばれたときの処理
+function selectGenre(genreName) {
+    selectedGenre = genreName;
+    currentGenreWords = rawData[genreName]; // 選ばれたジャンルの単語群をセット
+    
+    // モード選択画面へ進む
+    document.getElementById('genre-screen').style.display = 'none';
+    document.getElementById('mode-screen').style.display = 'block';
+}
+
+// クイズの初期化（10問か全問か）
+function initGame(mode) {
+    let shuffled = [...currentGenreWords].sort(() => 0.5 - Math.random());
+    
+    if (mode === '10問') {
+        remainingWords = shuffled.slice(0, Math.min(10, shuffled.length));
+    } else {
+        remainingWords = shuffled;
+    }
+    
     totalQuestions = remainingWords.length;
     correctCount = 0;
-    quizResults = []; // 結果をリセット
+    quizResults = []; 
     
+    document.getElementById('mode-screen').style.display = 'none';
     document.getElementById('quiz-screen').style.display = 'block';
-    document.getElementById('result-screen').style.display = 'none';
     
     nextQuestion();
 }
@@ -102,7 +158,8 @@ function nextQuestion() {
     currentQuiz = correctWord;
     document.getElementById('word').innerText = correctWord.english;
 
-    const wrongs = allWords.filter(w => w.english !== correctWord.english);
+    // 不正解の選択肢は「選択中のジャンル内」から選ぶ
+    const wrongs = currentGenreWords.filter(w => w.english !== correctWord.english);
     const shuffledWrongs = wrongs.sort(() => 0.5 - Math.random()).slice(0, 3);
     const choices = [correctWord, ...shuffledWrongs].sort(() => 0.5 - Math.random());
 
@@ -124,10 +181,9 @@ function checkAnswer(selectedJapanese) {
 
     const isCorrect = (selectedJapanese === currentQuiz.japanese);
     
-    // 1. 今回の結果（正しい日本語訳も含む）を記録する
     quizResults.push({
         english: currentQuiz.english,
-        japanese: currentQuiz.japanese, // 正しい日本語を追加
+        japanese: currentQuiz.japanese,
         isCorrect: isCorrect
     });
 
@@ -151,7 +207,8 @@ function showFinalResult() {
     const scoreArea = document.getElementById('score-area');
     scoreArea.innerHTML = `
         <div class="score-box">
-            <strong>スコア: ${correctCount} / ${totalQuestions} 問</strong><br>
+            ジャンル: <strong>${selectedGenre}</strong><br>
+            スコア: <strong>${correctCount} / ${totalQuestions} 問</strong><br>
             正解率: ${rate}%
         </div>
     `;
@@ -163,7 +220,6 @@ function showFinalResult() {
         const itemDiv = document.createElement('div');
         itemDiv.className = 'result-item';
 
-        // 左側：英単語と正しい日本語をまとめるコンテナ
         const infoDiv = document.createElement('div');
         infoDiv.className = 'word-info';
 
@@ -173,19 +229,18 @@ function showFinalResult() {
 
         const jpSpan = document.createElement('span');
         jpSpan.className = 'word-jp';
-        jpSpan.innerText = item.japanese; // 正しい答えを表示
+        jpSpan.innerText = item.japanese;
 
         infoDiv.appendChild(engSpan);
         infoDiv.appendChild(jpSpan);
 
-        // 右側：◯✕マーク
         const markSpan = document.createElement('span');
         if (item.isCorrect) {
             markSpan.innerText = '◯';
-            markSpan.className = 'mark-correct'; // 赤色
+            markSpan.className = 'mark-correct';
         } else {
             markSpan.innerText = '✕';
-            markSpan.className = 'mark-wrong';   // 青色
+            markSpan.className = 'mark-wrong';
         }
 
         itemDiv.appendChild(infoDiv);
@@ -194,9 +249,18 @@ function showFinalResult() {
     });
 }
 
+// イベント設定
+document.getElementById('mode-10-btn').onclick = () => initGame('10問');
+document.getElementById('mode-all-btn').onclick = () => initGame('全問');
 document.getElementById('next-btn').onclick = nextQuestion;
-document.getElementById('retry-btn').onclick = initGame;
 
+// もう一度挑戦するボタンを押した時は、一番最初の「ジャンル選択画面」に戻す
+document.getElementById('retry-btn').onclick = () => {
+    document.getElementById('result-screen').style.display = 'none';
+    document.getElementById('genre-screen').style.display = 'block';
+};
+
+// データの読み込み開始
 fetchWords();
 </script>
 
