@@ -8,57 +8,71 @@
         body { font-family: sans-serif; text-align: center; background: #f0f2f5; padding: 20px; }
         .quiz-container { background: white; max-width: 480px; margin: 0 auto; padding: 20px; border-radius: 10px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
         .progress { font-size: 14px; color: #666; margin-bottom: 10px; text-align: right; }
-        #word { font-size: 32px; font-weight: bold; margin-bottom: 20px; color: #333; }
+        
+        .word-area { display: flex; align-items: center; justify-content: center; gap: 15px; margin-bottom: 20px; }
+        #word { font-size: 32px; font-weight: bold; color: #333; margin: 0; }
+        
+        .btn-audio { background: none; border: none; font-size: 28px; cursor: pointer; padding: 5px; border-radius: 50%; transition: transform 0.1s; }
+        .btn-audio:hover { transform: scale(1.2); }
+        .btn-audio-small { font-size: 18px; padding: 2px; } 
+
         .btn { display: block; width: 100%; padding: 12px; margin: 10px 0; font-size: 18px; background: #007bff; color: white; border: none; border-radius: 5px; cursor: pointer; transition: 0.2s; }
         .btn:hover { background: #0056b3; }
         #result { font-size: 24px; font-weight: bold; margin-top: 20px; min-height: 36px; }
         
-        /* タイトル・選択画面のスタイル */
+        .btn-unknown { background: #6c757d; }
+        .btn-unknown:hover { background: #5a6268; }
+        
         .screen-title { font-size: 20px; font-weight: bold; margin-bottom: 20px; color: #555; }
-        .btn-genre { background: #17a2b8; } /* ジャンル用は水色 */
+        .btn-genre { background: #17a2b8; } 
         .btn-genre:hover { background: #138496; }
-        .btn-mode { background: #6f42c1; }  /* モード用は紫色 */
+        .btn-mode { background: #6f42c1; }  
         .btn-mode:hover { background: #59359a; }
         
-        /* スコア表示エリア */
         .score-box { font-size: 22px; margin-bottom: 20px; padding: 15px; background: #e9ecef; border-radius: 8px; }
         
-        /* 結果リストのスタイル */
         #result-list { text-align: left; max-width: 400px; margin: 0 auto 20px auto; font-size: 18px; line-height: 1.8; border-top: 1px solid #ddd; padding-top: 15px; }
         .result-item { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #eee; padding: 8px 0; }
-        .word-info { display: flex; gap: 15px; align-items: center; }
-        .word-eng { font-weight: bold; color: #333; min-width: 80px; }
-        .word-jp { color: #666; font-size: 16px; }
+        .word-info { display: flex; gap: 10px; align-items: center; }
+        .word-text { display: flex; flex-direction: column; } 
+        .word-eng { font-weight: bold; color: #333; }
+        .word-jp { color: #666; font-size: 14px; }
         
-        /* ◯と❌の色指定 */
-        .mark-correct { color: #dc3545; font-weight: bold; font-size: 20px; } /* 赤色 */
-        .mark-wrong { color: #0056b3; font-weight: bold; font-size: 20px; }   /* 青色 */
+        .mark-correct { color: #dc3545; font-weight: bold; font-size: 20px; margin-left: 10px; } 
+        .mark-wrong { color: #0056b3; font-weight: bold; font-size: 20px; margin-left: 10px; }   
     </style>
 </head>
 <body>
 
 <div class="quiz-container">
+    <!-- 1. ジャンル選択画面 -->
     <div id="genre-screen">
         <div class="screen-title">📁 ジャンルを選んでください</div>
         <div id="genre-buttons"></div>
     </div>
 
+    <!-- 2. モード選択画面 -->
     <div id="mode-screen" style="display:none;">
         <div class="screen-title">📊 出題モードを選んでください</div>
         <button id="mode-10-btn" class="btn btn-mode">🔟 10問クイズ</button>
         <button id="mode-all-btn" class="btn btn-mode">♾️ 全問クイズ</button>
     </div>
 
+    <!-- 3. クイズ中の画面 -->
     <div id="quiz-screen" style="display:none;">
         <div id="progress" class="progress"></div>
-        <div id="word">読み込み中...</div>
+        <div class="word-area">
+            <h2 id="word">読み込み中...</h2>
+            <button id="quiz-audio-btn" class="btn-audio">🔊</button>
+        </div>
         <div id="choices"></div>
         <div id="result"></div>
         <button id="next-btn" class="btn" style="display:none; background:#28a745;">次の問題へ</button>
     </div>
 
+    <!-- 4. リザルト画面 -->
     <div id="result-screen" style="display:none;">
-        <div id="word">🎉 クイズ完了！</div>
+        <div style="font-size: 32px; font-weight: bold; margin-bottom: 20px; color: #333;">🎉 クイズ完了！</div>
         <div id="score-area"></div>
         <div id="result-list"></div>
         <button id="retry-btn" class="btn" style="background:#6c757d;">もう一度挑戦する</button>
@@ -66,25 +80,27 @@
 </div>
 
 <script>
-// ⚠️ ここに【新しいGASのURL】を貼り付けてください
+// ⚠️ ここに【GASのURL】を貼り付けてください
 const GAS_URL = 'https://script.google.com/macros/s/AKfycbxzuX5M_UD1rqTozFj6hyO3ImLwuut241zL5UuVyGFzz3vfawE0S6pv9p9Vh8yWWQFS/exec'; 
 
-let rawData = {};         // GASから届いた全データ（ジャンル別）
-let selectedGenre = '';   // 現在選ばれているジャンル名
-let currentGenreWords = []; // 選ばれたジャンルの単語リスト全部
-let remainingWords = [];  // クイズでまだ出題していない残り単語
+let rawData = {};         
+let selectedGenre = '';   
+let currentGenreWords = []; 
+let remainingWords = [];  
 let currentQuiz = {};
 let totalQuestions = 0;
 let correctCount = 0;
 let quizResults = []; 
 
-// 起動時にデータを一括取得
+// ✨ 効果音ファイルの読み込み設定
+const soundCorrect = new Audio('correct.mp3');
+const soundWrong = new Audio('wrong.mp3');
+const soundFinish = new Audio('finish.mp3');
+
 async function fetchWords() {
     try {
         const response = await fetch(GAS_URL);
         rawData = await response.json();
-        
-        // ジャンル選択ボタンを自動生成
         createGenreButtons();
     } catch (error) {
         document.getElementById('word').innerText = 'データの読み込みに失敗しました';
@@ -92,14 +108,11 @@ async function fetchWords() {
     }
 }
 
-// スプレッドシートのシート名からボタンを自動で作る
 function createGenreButtons() {
     const container = document.getElementById('genre-buttons');
     container.innerHTML = '';
     
-    // スプレッドシートの各シート名（ジャンル名）を取得してループ処理
     Object.keys(rawData).forEach(genreName => {
-        // 各ジャンルに最低4つの単語があるかチェック
         if (rawData[genreName].length < 4) return; 
 
         const button = document.createElement('button');
@@ -110,21 +123,17 @@ function createGenreButtons() {
     });
 
     if(container.innerHTML === "") {
-        container.innerHTML = "<p>有効な単語データ（4択を作れる4単語以上）が入ったシートが見つかりません。</p>";
+        container.innerHTML = "<p>有効な単語データが入ったシートが見つかりません。</p>";
     }
 }
 
-// ジャンルが選ばれたときの処理
 function selectGenre(genreName) {
     selectedGenre = genreName;
-    currentGenreWords = rawData[genreName]; // 選ばれたジャンルの単語群をセット
-    
-    // モード選択画面へ進む
+    currentGenreWords = rawData[genreName]; 
     document.getElementById('genre-screen').style.display = 'none';
     document.getElementById('mode-screen').style.display = 'block';
 }
 
-// クイズの初期化（10問か全問か）
 function initGame(mode) {
     let shuffled = [...currentGenreWords].sort(() => 0.5 - Math.random());
     
@@ -144,6 +153,22 @@ function initGame(mode) {
     nextQuestion();
 }
 
+function speakEnglish(text) {
+    window.speechSynthesis.cancel();
+    const uttr = new SpeechSynthesisUtterance(text);
+    uttr.lang = 'en-US'; 
+    window.speechSynthesis.speak(uttr);
+}
+
+// ✨ 効果音を頭から鳴らすための再生用関数（連打対策含む）
+function playSound(audioObject) {
+    audioObject.currentTime = 0; // 再生位置を最初に戻す
+    audioObject.play().catch(error => {
+        // ブラウザのセキュリティ制限（一度も画面をクリックしていないと音が鳴らない仕様）の回避用
+        console.log("音声再生がブロックされました。画面を一度クリックしてください。", error);
+    });
+}
+
 function nextQuestion() {
     if (remainingWords.length === 0) {
         showFinalResult();
@@ -158,13 +183,15 @@ function nextQuestion() {
     currentQuiz = correctWord;
     document.getElementById('word').innerText = correctWord.english;
 
-    // 不正解の選択肢は「選択中のジャンル内」から選ぶ
+    document.getElementById('quiz-audio-btn').onclick = () => speakEnglish(correctWord.english);
+
     const wrongs = currentGenreWords.filter(w => w.english !== correctWord.english);
     const shuffledWrongs = wrongs.sort(() => 0.5 - Math.random()).slice(0, 3);
     const choices = [correctWord, ...shuffledWrongs].sort(() => 0.5 - Math.random());
 
     const choicesContainer = document.getElementById('choices');
     choicesContainer.innerHTML = '';
+    
     choices.forEach(choice => {
         const button = document.createElement('button');
         button.className = 'btn';
@@ -172,6 +199,12 @@ function nextQuestion() {
         button.onclick = () => checkAnswer(choice.japanese);
         choicesContainer.appendChild(button);
     });
+
+    const unknownButton = document.createElement('button');
+    unknownButton.className = 'btn btn-unknown';
+    unknownButton.innerText = '❓ わからない';
+    unknownButton.onclick = () => checkAnswer('__UNKNOWN__');
+    choicesContainer.appendChild(unknownButton);
 }
 
 function checkAnswer(selectedJapanese) {
@@ -191,9 +224,17 @@ function checkAnswer(selectedJapanese) {
         resultDiv.innerText = '⭕ 正解！';
         resultDiv.style.color = 'green';
         correctCount++;
+        playSound(soundCorrect); // ✨ 正解の音を鳴らす
     } else {
-        resultDiv.innerText = `❌ 不正解... (正解: ${currentQuiz.japanese})`;
-        resultDiv.style.color = 'red';
+        playSound(soundWrong); // ✨ 不正解・わからないの音を鳴らす
+        
+        if (selectedJapanese === '__UNKNOWN__') {
+            resultDiv.innerText = `🤔 覚えるチャンス！ (正解: ${currentQuiz.japanese})`;
+            resultDiv.style.color = '#6c757d';
+        } else {
+            resultDiv.innerText = `❌ 不正解... (正解: ${currentQuiz.japanese})`;
+            resultDiv.style.color = 'red';
+        }
     }
     
     document.getElementById('next-btn').style.display = 'block';
@@ -203,6 +244,9 @@ function showFinalResult() {
     document.getElementById('quiz-screen').style.display = 'none';
     document.getElementById('result-screen').style.display = 'block';
     
+    // ✨ 全問終了時のファンファーレなどを鳴らす
+    playSound(soundFinish);
+
     const rate = Math.round((correctCount / totalQuestions) * 100);
     const scoreArea = document.getElementById('score-area');
     scoreArea.innerHTML = `
@@ -223,6 +267,15 @@ function showFinalResult() {
         const infoDiv = document.createElement('div');
         infoDiv.className = 'word-info';
 
+        const audioBtn = document.createElement('button');
+        audioBtn.className = 'btn-audio btn-audio-small';
+        audioBtn.innerText = '🔊';
+        audioBtn.onclick = () => speakEnglish(item.english); 
+        infoDiv.appendChild(audioBtn);
+
+        const textDiv = document.createElement('div');
+        textDiv.className = 'word-text';
+
         const engSpan = document.createElement('span');
         engSpan.className = 'word-eng';
         engSpan.innerText = item.english;
@@ -231,8 +284,9 @@ function showFinalResult() {
         jpSpan.className = 'word-jp';
         jpSpan.innerText = item.japanese;
 
-        infoDiv.appendChild(engSpan);
-        infoDiv.appendChild(jpSpan);
+        textDiv.appendChild(engSpan);
+        textDiv.appendChild(jpSpan);
+        infoDiv.appendChild(textDiv);
 
         const markSpan = document.createElement('span');
         if (item.isCorrect) {
@@ -249,18 +303,14 @@ function showFinalResult() {
     });
 }
 
-// イベント設定
 document.getElementById('mode-10-btn').onclick = () => initGame('10問');
 document.getElementById('mode-all-btn').onclick = () => initGame('全問');
 document.getElementById('next-btn').onclick = nextQuestion;
-
-// もう一度挑戦するボタンを押した時は、一番最初の「ジャンル選択画面」に戻す
 document.getElementById('retry-btn').onclick = () => {
     document.getElementById('result-screen').style.display = 'none';
     document.getElementById('genre-screen').style.display = 'block';
 };
 
-// データの読み込み開始
 fetchWords();
 </script>
 
